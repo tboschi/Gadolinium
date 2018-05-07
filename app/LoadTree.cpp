@@ -10,6 +10,15 @@
 #include "TFile.h"
 #include "TH1D.h"
 
+class Sort
+{
+	private:
+		std::vector<double> vX;
+	public:
+		Sort(std::vector<double> &vv) : vX(vv) {}
+		bool operator()(int i, int j) const { return vX.at(i) < vX.at(j); }
+};
+
 void Usage(char* Name);
 std::vector<double> Markov(const std::vector<double> &Spectrum, int Window);
 int main(int argc, char** argv)
@@ -136,7 +145,6 @@ int main(int argc, char** argv)
 
 	double Perc = 0.02;	//2% of the peak is start
 	double Thr = Perc*(Max-Min);
-	std::cout << "Min " << Min << "\tMax " << Max << "\tDiff " << Max - Min << "\tPerc " << Thr << std::endl;
 	double Baseline = 0, Rms = 0;
 	int SampleLength = 0;
 	int iA, iB;
@@ -163,23 +171,23 @@ int main(int argc, char** argv)
 	for (unsigned int i = iA; i < iB; ++i)
 		Std += pow(vCopy.at(i) - Baseline, 2)/(iB-iA-1);
 	Std = sqrt(Std);
-	std::cout << "Sample " << SampleLength << "\tBaseline " << Baseline << std::endl;
 
 	for (unsigned int i = 0; i < vCopy.size(); ++i)
 		vCopy.at(i) -= Baseline;
 
-	std::vector<double> vPeak, vVall;
-	std::vector<int> iPeak, iVall;
-	vPeak.push_back(vCopy.at(iMax));
-	iPeak.push_back(iMax);
+	std::vector<double> yPeak, yVall;
+	std::vector<double> xPeak, xVall;
+	std::vector<unsigned int> uP, uV;
+	yPeak.push_back(vCopy.at(iMax));
+	xPeak.push_back(vWave.at(iMax));
+	uP.push_back(uP.size());
 
 	//going left first, and then right
 	for (int Dir = -1; Dir < 2; Dir += 2)
 	{
 		double PoV = false;		//F looking for Valley, T looking for P
-		int iD = iPeak.front(), iS = iPeak.front();
-		double fS = vPeak.front();
-		std::cout << "dir " << Dir << "\t" << vWave.at(iS) << "\t" << fS << std::endl;
+		int iD = iMax, iS = iMax;
+		double fS = yPeak.front();
 		while (iD > -1 && iD < vCopy.size())
 		{
 			int Sign = 2*PoV - 1;	//-1 looking for Valley, +1 looking for Peak
@@ -190,7 +198,7 @@ int main(int argc, char** argv)
 			}
 			if (-Sign*(vCopy.at(iD) - fS) > Thr/2.0)
 			{
-				double fX = -Sign*vPeak.front();
+				double fX = -Sign*yPeak.front();
 				int    iX = -1;
 				//for (unsigned j = iD; Dir*(iS-j) < 0 && j > -1 && j < vCopy.size(); j -= Dir)
 				for (int j = iD; Dir*(iS-j) < 0; j -= Dir)
@@ -203,10 +211,13 @@ int main(int argc, char** argv)
 				}
 				if (iX > -1)
 				{
-					std::vector<double> &vRef = PoV ? vPeak : vVall;
-					std::vector<int> &iRef = PoV ? iPeak : iVall;
-					vRef.push_back(fX);
-					iRef.push_back(iX);
+					std::vector<double> &yRef = PoV ? yPeak : yVall;
+					std::vector<double> &xRef = PoV ? xPeak : xVall;
+					std::vector<unsigned int> &uR = PoV ? uP : uV;
+
+					yRef.push_back(fX);
+					xRef.push_back(vWave.at(iX));
+					uR.push_back(uR.size());
 					fS = fX;
 					iD = iS = iX;
 					PoV = !PoV;
@@ -215,15 +226,34 @@ int main(int argc, char** argv)
 			iD += Dir;
 		}
 	}
+	std::sort(uP.begin(), uP.end(), Sort(xPeak));
+	std::sort(uV.begin(), uV.end(), Sort(xVall));
 
-	std::cout << "Peaks\t" << vPeak.size() << "\tValleys " << vVall.size() << std::endl;
-	for (unsigned int j = 0; j < vPeak.size(); ++j)
-		std::cout << "1\t" << vWave.at(iPeak.at(j)) << "\t" << vPeak.at(j) << std::endl;
-	for (unsigned int j = 0; j < vVall.size(); ++j)
-		std::cout << "0\t" << vWave.at(iVall.at(j)) << "\t" << vVall.at(j) << std::endl;
+	std::cout << "#Peaks\t" << xPeak.size() << "\tValleys " << xVall.size() << std::endl;
+	for (unsigned int j = 0; j < xPeak.size(); ++j)
+		std::cout << "1\t" << xPeak.at(uP.at(j)) << "\t" << yPeak.at(uP.at(j)) << std::endl;
+	for (unsigned int j = 0; j < xVall.size(); ++j)
+		std::cout << "0\t" << xVall.at(uV.at(j)) << "\t" << yVall.at(uV.at(j)) << std::endl;
+
+	std::vector<double> vAmp, vAbs;
+	unsigned int j_ = 0;
+	for (unsigned int i = 0; i < uP.size()-1; ++i)
+	{	//y = mx + q
+		double m = (yPeak.at(uP.at(i)) - yPeak.at(uP.at(i+1)))/(xPeak.at(uP.at(i)) - xPeak.at(uP.at(i+1)));
+		unsigned int j = j_;
+		while (vWave.at(j) < xPeak.at(uP.at(i+1)))
+		{
+			double y0 = m * (vWave.at(j) - xPeak.at(uP.at(i))) + yPeak.at(uP.at(i));
+			std::cout << j << "\t" << vWave.at(j) << "\t" << xPeak.at(uP.at(i)) << "\t" << m << "\t" << y0 << std::endl;
+			vAmp.push_back(y0-vCopy.at(j));
+			vAbs.push_back(log10(fabs(y0/vCopy.at(j)))*vCopy.at(iMax));
+			++j;
+		}
+		j_ = j;
+	}
 
 	for (unsigned int i = 0; i < vInty.size(); ++i)
-		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vCopy.at(i) << std::endl;
+		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vCopy.at(i) << "\t" << vAmp.at(i) << "\t" << vAbs.at(i) << std::endl;
 
 
 	return 0;
