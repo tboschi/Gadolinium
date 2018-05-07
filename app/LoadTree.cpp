@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 #include <getopt.h>
 
 #include "TFile.h"
@@ -107,9 +108,9 @@ int main(int argc, char** argv)
 		}
 	}
 
-	std::vector<double> vSmooth = Markov(vCopy, Integ/2);
 					
 	/*
+	std::vector<double> vSmooth = Markov(vCopy, Integ/2);
 	for (unsigned int i = 0; i < vInty.size(); ++i)
 		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vMarkov.at(i) << "\t" << vCopy.at(i) << "\t" << vSmooth.at(i) << std::endl;
 	*/
@@ -147,14 +148,12 @@ int main(int argc, char** argv)
 		for (j = i; j < vCopy.size(); ++j)
 		{
 			sum  += vCopy.at(j);
-			sum2 += pow(vCopy.at(j), 2);
 			if (fabs(vCopy.at(j) - s0) > Perc*(Max-Min))
 				break;
 		}
 		if (j-i > SampleLength)
 		{
 			Baseline = sum/(j-i);
-			Rms = sqrt(sum2/(j-i));
 			SampleLength = j-i;
 			iA = i, iB = j;
 		}
@@ -164,26 +163,23 @@ int main(int argc, char** argv)
 	for (unsigned int i = iA; i < iB; ++i)
 		Std += pow(vCopy.at(i) - Baseline, 2)/(iB-iA-1);
 	Std = sqrt(Std);
-	std::cout << "Sample " << SampleLength << "\tBaseline " << Baseline << "\t" << Std << "\t" << Rms << "\t" << vWave.at(iA) << "\t" << vWave.at(iB) << std::endl;
+	std::cout << "Sample " << SampleLength << "\tBaseline " << Baseline << std::endl;
 
-	std::vector<double> Derivate(vCopy.size());
-	for (unsigned int i = 1; i < vCopy.size()-1; ++i)
-	{
-		Derivate.at(i) = (vCopy.at(i+1) - vCopy.at(i-1))/(vWave.at(i+1)-vWave.at(i-1));
-	}
-
+	for (unsigned int i = 0; i < vCopy.size(); ++i)
+		vCopy.at(i) -= Baseline;
 
 	std::vector<double> vPeak, vVall;
 	std::vector<int> iPeak, iVall;
 	vPeak.push_back(vCopy.at(iMax));
 	iPeak.push_back(iMax);
-	double PoV = false;		//F looking for Valley, T looking for P
 
 	//going left first, and then right
 	for (int Dir = -1; Dir < 2; Dir += 2)
 	{
-		int iD = iMax, iS = iPeak.back();
-		double fS = vPeak.back();
+		double PoV = false;		//F looking for Valley, T looking for P
+		int iD = iPeak.front(), iS = iPeak.front();
+		double fS = vPeak.front();
+		std::cout << "dir " << Dir << "\t" << vWave.at(iS) << "\t" << fS << std::endl;
 		while (iD > -1 && iD < vCopy.size())
 		{
 			int Sign = 2*PoV - 1;	//-1 looking for Valley, +1 looking for Peak
@@ -196,10 +192,9 @@ int main(int argc, char** argv)
 			{
 				double fX = -Sign*vPeak.front();
 				int    iX = -1;
-			std::cout << "A" << Dir << "\t" << iD << "\t" << iS << "\t" << (Dir*(iS-iD)<0) <<"\t"<< (iD > -1) << "\t" << (iD < vCopy.size()) << std::endl; 
-				for (unsigned j = iD; Dir*(iS-j) < 0 && j > -1 && j < vCopy.size(); j += -Dir)
+				//for (unsigned j = iD; Dir*(iS-j) < 0 && j > -1 && j < vCopy.size(); j -= Dir)
+				for (int j = iD; Dir*(iS-j) < 0; j -= Dir)
 				{
-			std::cout << "B" << Dir << "\t" << j << "\t" << iS << "\t" << Dir*(iS-j) << std::endl; 
 					if (Sign*(vCopy.at(j)-fX) > 0)
 					{
 						fX = vCopy.at(j);
@@ -223,30 +218,12 @@ int main(int argc, char** argv)
 
 	std::cout << "Peaks\t" << vPeak.size() << "\tValleys " << vVall.size() << std::endl;
 	for (unsigned int j = 0; j < vPeak.size(); ++j)
-		std::cout << "P\t" << vWave.at(iPeak.at(j)) << "\t" << vPeak.at(j) << std::endl;
+		std::cout << "1\t" << vWave.at(iPeak.at(j)) << "\t" << vPeak.at(j) << std::endl;
 	for (unsigned int j = 0; j < vVall.size(); ++j)
-		std::cout << "V\t" << vWave.at(iVall.at(j)) << "\t" << vVall.at(j) << std::endl;
+		std::cout << "0\t" << vWave.at(iVall.at(j)) << "\t" << vVall.at(j) << std::endl;
 
-	double integ = 0.0;
 	for (unsigned int i = 0; i < vInty.size(); ++i)
-		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vCopy.at(i)-Baseline << "\t" << Derivate.at(i) << "\t" << (integ += Derivate.at(i)) << std::endl;
-	/*
-	std::cout << mean << "\t+-\t" << mean2 << "\trms " << rms << std::endl;
-
-	for (unsigned int i = Integ/2; i < vWave.size()-Integ/2; ++i)
-	{
-		mean += vInty.at(i);
-		mean2 += pow(vInty.at(i), 2);
-		Out << vWave.at(i) << "\t" << mean/(i-Integ/2) << "\t" << sqrt(mean2/(i-Integ/2)) << std::endl;
-		//Out << vWave.at(i) << "\t" << (vInty.at(i+1)-vInty.at(i))/(vWave.at(i+1)-vWave.at(i)) << std::endl;
-		double sum = 0;
-		for (int j = -int(Integ)/2; j < int(Integ)/2; ++j)
-			sum += vInty.at(i+j);
-		//Out << vWave.at(i) << "\t" << sum/Integ << std::endl;
-		//hSpectrum->Fill(vWave.at(i), vInty.at(i));
-	}
-	*/
-
+		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vCopy.at(i) << std::endl;
 
 
 	return 0;
