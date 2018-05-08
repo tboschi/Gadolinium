@@ -3,12 +3,14 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <deque>
 #include <cmath>
 #include <algorithm>
 #include <getopt.h>
 
 #include "TFile.h"
 #include "TH1D.h"
+#include "TTree.h"
 
 class Sort
 {
@@ -26,7 +28,8 @@ int main(int argc, char** argv)
 	const struct option longopts[] = 
 	{
 		{"intput", 	required_argument, 	0, 'i'},
-		{"output", 	required_argument, 	0, 'o'},
+		{"spectrum", 	required_argument, 	0, 'o'},
+		{"peakvall", 	required_argument, 	0, 'l'},
 		{"rootout", 	required_argument, 	0, 'r'},
 		{"help", 	no_argument,	 	0, 'h'},
 		{0,	0, 	0,	0},
@@ -37,11 +40,11 @@ int main(int argc, char** argv)
 	opterr = 1;
 	
 	std::ifstream InFile;
-	std::ofstream OutFile;
+	std::ofstream SpecFile, PeakFile;
 	TFile *RootFile;
 	unsigned int Integ = 0;
 	
-	while((iarg = getopt_long(argc,argv, "I:i:r:o:h", longopts, &index)) != -1)
+	while((iarg = getopt_long(argc,argv, "I:i:r:o:l:h", longopts, &index)) != -1)
 	{
 		switch(iarg)
 		{
@@ -52,7 +55,10 @@ int main(int argc, char** argv)
 				InFile.open(optarg);
 				break;
 			case 'o':
-				OutFile.open(optarg);
+				SpecFile.open(optarg);
+				break;
+			case 'l':
+				PeakFile.open(optarg);
 				break;
 			case 'r':
 				RootFile = new TFile(optarg, "RECREATE");
@@ -66,10 +72,11 @@ int main(int argc, char** argv)
 	
 	}
 
-	std::ostream &Out = (OutFile.is_open()) ? OutFile : std::cout;
+	std::ostream &OutS = (SpecFile.is_open()) ? SpecFile : std::cout;
+	std::ostream &OutP = (PeakFile.is_open()) ? PeakFile : std::cout;
 
 	double Wavelength, Intensity;
-	std::vector<double> vWave, vInty;
+	std::vector<double> xWave, yInty;
 
 	std::string Line;
 	std::stringstream ssL;
@@ -83,82 +90,67 @@ int main(int argc, char** argv)
 		ssL << Line;
 		ssL >> Wavelength >> Intensity;
 
-		vWave.push_back(Wavelength);
-		vInty.push_back(Intensity);
+		xWave.push_back(Wavelength);
+		yInty.push_back(Intensity);
 	}
 	//					4 points per 100nm = 400 bins
-	TH1D* hSpectrum = new TH1D("hspectrum", "Spectrum", 400, 300, 400);
-	TH1D* hDerivate = new TH1D("hderivate", "Derivate", 400, 300, 400);
+	TH1D* hIntensity = new TH1D("hintensity", "Intensity", 4000, 100, 1100);
+	TH1D* hAbsorbanc = new TH1D("habsorbanc", "Absorbanc", 4000, 100, 1100);
 
+	TTree *tPeak = new TTree("Peak", "Peak");
+	TTree *tVall = new TTree("Vall", "Valley");
+
+	double tx, ty;
+	tPeak->Branch("x", &tx, "tx/D");
+	tPeak->Branch("y", &ty, "ty/D");
+	tVall->Branch("x", &tx, "tx/D");
+	tVall->Branch("y", &ty, "ty/D");
 	
-	double mean = 0, mean2 = 0, rms = 0;
-	int sample = 200;
-	int start = 0;
-	for (unsigned int i = start; i < start+sample; ++i)
-	{
-		mean += vInty.at(i)/sample;
-		rms += pow(vInty.at(i), 2)/sample;
-	}
-	rms = sqrt(rms);
-	for (unsigned int i = start; i < start+sample; ++i)
-		mean2 += pow(vInty.at(i)-mean, 2)/(sample-1);
-	mean2 = sqrt(mean2);
-
-	unsigned int Window = Integ;
-
-	std::vector<double> vMarkov = Markov(vInty, Integ/2);
-
-	std::vector<double> vCopy(vInty);
-	for (int rep = 1; rep < Window; ++rep)
-	{
-		for (int i = rep; i < vCopy.size()-rep; ++i)
-		{
-			vCopy.at(i) = (vCopy.at(i+rep) + vCopy.at(i-rep))/2.0;
-		}
-	}
+	//smoothen spectrum
+	std::vector<double> yWave(yInty);
+	for (int rep = 1; rep < Integ; ++rep)
+		for (int i = rep; i < yWave.size()-rep; ++i)
+			yWave.at(i) = (yWave.at(i+rep) + yWave.at(i-rep))/2.0;
 
 					
-	/*
-	std::vector<double> vSmooth = Markov(vCopy, Integ/2);
-	for (unsigned int i = 0; i < vInty.size(); ++i)
-		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vMarkov.at(i) << "\t" << vCopy.at(i) << "\t" << vSmooth.at(i) << std::endl;
-	*/
-
-	//vCopy is almost backgroundless
-	//must find a way to subtract baseline autmatically
-	//find the lowest and highest point of Copy
+	//yWave is almost backgroundless now
+	//find the lowest and highest point of it
+	//to subtract baseline autmatically
+	//
 	double Min = 999, Max = -999;
 	unsigned int iMin, iMax;
-	for (unsigned int i = 0; i < vCopy.size(); ++i)
+	for (unsigned int i = 0; i < yWave.size(); ++i)
 	{
-		if (Min > vCopy.at(i))
+		if (Min > yWave.at(i))
 		{
-			Min = vCopy.at(i);
+			Min = yWave.at(i);
 			iMin = i;
 		}
-		if (Max < vCopy.at(i))
+		if (Max < yWave.at(i))
 		{
-			Max = vCopy.at(i);
+			Max = yWave.at(i);
 			iMax = i;
 		}
 	}
 
 	double Perc = 0.02;	//2% of the peak is start
 	double Thr = Perc*(Max-Min);
+
+	/*
 	double Baseline = 0, Rms = 0;
 	int SampleLength = 0;
 	int iA, iB;
-	for (unsigned int i = 0; i < vCopy.size(); ++i)
+	for (unsigned int i = 0; i < xWave.size(); ++i)
 	{
-		double s0 = vCopy.at(i);
-		double sum = 0, sum2 = 0;
-		unsigned int j;
-		for (j = i; j < vCopy.size(); ++j)
+		double s0 = yInty.at(i);
+		double sum = 0;
+		unsigned int j = i;
+		while (fabs(yWave.at(j) - s0) < Thr)
 		{
-			sum  += vCopy.at(j);
-			if (fabs(vCopy.at(j) - s0) > Perc*(Max-Min))
-				break;
+			sum += yWave.at(j);
+			++j;
 		}
+
 		if (j-i > SampleLength)
 		{
 			Baseline = sum/(j-i);
@@ -167,94 +159,120 @@ int main(int argc, char** argv)
 		}
 		i = j;		//skip forward
 	}
-	double Std = 0;
-	for (unsigned int i = iA; i < iB; ++i)
-		Std += pow(vCopy.at(i) - Baseline, 2)/(iB-iA-1);
-	Std = sqrt(Std);
+	*/
 
-	for (unsigned int i = 0; i < vCopy.size(); ++i)
-		vCopy.at(i) -= Baseline;
+	//for (unsigned int i = 0; i < xWave.size(); ++i)
+	//	yWave.at(i) -= Baseline;
 
-	std::vector<double> yPeak, yVall;
-	std::vector<double> xPeak, xVall;
-	std::vector<unsigned int> uP, uV;
-	yPeak.push_back(vCopy.at(iMax));
-	xPeak.push_back(vWave.at(iMax));
-	uP.push_back(uP.size());
+	//find all peak and valleys
+	//
+	std::deque<double> yPeak, yVall;
+	std::deque<double> xPeak, xVall;
+
+	double xMax = xWave.at(iMax);
+	double yMax = yWave.at(iMax);
+	xPeak.push_back(xMax);
+	yPeak.push_back(yMax);
 
 	//going left first, and then right
 	for (int Dir = -1; Dir < 2; Dir += 2)
 	{
 		double PoV = false;		//F looking for Valley, T looking for P
 		int iD = iMax, iS = iMax;
-		double fS = yPeak.front();
-		while (iD > -1 && iD < vCopy.size())
+		double fS = yMax;
+		while (iD > -1 && iD < xWave.size())
 		{
 			int Sign = 2*PoV - 1;	//-1 looking for Valley, +1 looking for Peak
-			if ( Sign*(vCopy.at(iD) - fS) > Thr/2.0)
+			if ( Sign*(yWave.at(iD) - fS) > Thr)
 			{
 				iS = iD ;
-				fS = vCopy.at(iD);
+				fS = yWave.at(iD);
 			}
-			if (-Sign*(vCopy.at(iD) - fS) > Thr/2.0)
+			if (-Sign*(yWave.at(iD) - fS) > Thr)
 			{
-				double fX = -Sign*yPeak.front();
-				int    iX = -1;
-				//for (unsigned j = iD; Dir*(iS-j) < 0 && j > -1 && j < vCopy.size(); j -= Dir)
-				for (int j = iD; Dir*(iS-j) < 0; j -= Dir)
+				double fZ = -Sign*yPeak.front();
+				int    iZ = -1;
+				for (int j = iD; Dir*(iS-j) < 1 && j > -1 && j < xWave.size(); j -= Dir)
 				{
-					if (Sign*(vCopy.at(j)-fX) > 0)
+					if (Sign*(yWave.at(j)-fZ) > 0)
 					{
-						fX = vCopy.at(j);
-						iX = j;
+						fZ = yWave.at(j);
+						iZ = j;
 					}
 				}
-				if (iX > -1)
+				if (iZ > -1)
 				{
-					std::vector<double> &yRef = PoV ? yPeak : yVall;
-					std::vector<double> &xRef = PoV ? xPeak : xVall;
-					std::vector<unsigned int> &uR = PoV ? uP : uV;
+					std::deque<double> &yRef = PoV ? yPeak : yVall;
+					std::deque<double> &xRef = PoV ? xPeak : xVall;
 
-					yRef.push_back(fX);
-					xRef.push_back(vWave.at(iX));
-					uR.push_back(uR.size());
-					fS = fX;
-					iD = iS = iX;
+					if (Dir < 0)
+					{
+						yRef.push_front(fZ);
+						xRef.push_front(xWave.at(iZ));
+					}
+					else
+					{
+						yRef.push_back(fZ);
+						xRef.push_back(xWave.at(iZ));
+					}
+					fS = fZ;
+					iD = iS = iZ;
 					PoV = !PoV;
 				}
 			}
 			iD += Dir;
 		}
 	}
-	std::sort(uP.begin(), uP.end(), Sort(xPeak));
-	std::sort(uV.begin(), uV.end(), Sort(xVall));
 
-	std::cout << "#Peaks\t" << xPeak.size() << "\tValleys " << xVall.size() << std::endl;
+	OutP << "#Peaks\t" << xPeak.size() << "\tValleys " << xVall.size() << std::endl;
 	for (unsigned int j = 0; j < xPeak.size(); ++j)
-		std::cout << "1\t" << xPeak.at(uP.at(j)) << "\t" << yPeak.at(uP.at(j)) << std::endl;
+	{
+		tx = xPeak.at(j);
+		ty = yPeak.at(j);
+		tPeak->Fill();
+		OutP << "1\t" << xPeak.at(j) << "\t" << yPeak.at(j)/Max << std::endl;
+	}
 	for (unsigned int j = 0; j < xVall.size(); ++j)
-		std::cout << "0\t" << xVall.at(uV.at(j)) << "\t" << yVall.at(uV.at(j)) << std::endl;
-
-	std::vector<double> vAmp, vAbs;
-	unsigned int j_ = 0;
-	for (unsigned int i = 0; i < uP.size()-1; ++i)
-	{	//y = mx + q
-		double m = (yPeak.at(uP.at(i)) - yPeak.at(uP.at(i+1)))/(xPeak.at(uP.at(i)) - xPeak.at(uP.at(i+1)));
-		unsigned int j = j_;
-		while (vWave.at(j) < xPeak.at(uP.at(i+1)))
-		{
-			double y0 = m * (vWave.at(j) - xPeak.at(uP.at(i))) + yPeak.at(uP.at(i));
-			std::cout << j << "\t" << vWave.at(j) << "\t" << xPeak.at(uP.at(i)) << "\t" << m << "\t" << y0 << std::endl;
-			vAmp.push_back(y0-vCopy.at(j));
-			vAbs.push_back(log10(fabs(y0/vCopy.at(j)))*vCopy.at(iMax));
-			++j;
-		}
-		j_ = j;
+	{
+		tx = xVall.at(j);
+		ty = yVall.at(j);
+		tVall->Fill();
+		OutP << "0\t" << xVall.at(j) << "\t" << yVall.at(j)/Max << std::endl;
 	}
 
-	for (unsigned int i = 0; i < vInty.size(); ++i)
-		Out << vWave.at(i) << "\t" << vInty.at(i) << "\t" << vCopy.at(i) << "\t" << vAmp.at(i) << "\t" << vAbs.at(i) << std::endl;
+	//Creating absorbance spectrum
+	std::vector<double> vAmp, vAbs, vLine;
+	for (unsigned int i = 0, j = 1; i < xWave.size(); ++i)
+	{
+		double y0;
+		if (xWave.at(i) < xPeak.back())
+		{
+			double m = (yPeak.at(j) - yPeak.at(j-1))/(xPeak.at(j) - xPeak.at(j-1));
+			y0 = m * (xWave.at(i) - xPeak.at(j)) + yPeak.at(j);
+			if (j < xPeak.size() - 1 && xWave.at(i) > xPeak.at(j))
+				++j;
+		}
+		else 
+			y0 = yWave.at(i);
+		vAmp.push_back( y0-yWave.at(i) );
+		vAbs.push_back( log10(y0/yWave.at(i)) );
+	}
 
+	for (unsigned int i = 0; i < xWave.size(); ++i)
+	{
+		hIntensity->Fill(xWave.at(i), yWave.at(i));
+		hAbsorbanc->Fill(xWave.at(i), vAbs.at(i));
+		OutS << xWave.at(i) << "\t" << yInty.at(i)/Max << "\t" << yWave.at(i)/Max << "\t" << vAmp.at(i)/Max << "\t" << vAbs.at(i) << std::endl;
+	}
+
+	if (RootFile->IsOpen())
+	{
+		hIntensity->Write();
+		hAbsorbanc->Write();
+		tPeak->Write();
+		tVall->Write();
+		RootFile->Close();
+	}
 
 	return 0;
 }
@@ -270,10 +288,13 @@ void Usage(char *Name)
 	std::cout << "Output file for testing now" << std::endl;
 	std::cout <<"\n  -r,  --rootout\t\t";
 	std::cout << "Output ROOT file with the absorption spectrum and other stuff" << std::endl;
+	std::cout <<"\n  -I,  --intwindow\t\t";
+	std::cout << "Define width of integration window" << std::endl;
 	std::cout <<"\n  -h,  --help\t\t";
 	std::cout << "Print this message and exit" << std::endl;
 }
 
+//std::vector<double> vMarkov = Markov(vInty, Integ/2);
 std::vector<double> Markov(const std::vector<double> &Spectrum, int Window)
 {
 	double Area = 0;
