@@ -1,5 +1,6 @@
 .PHONY: clean
 
+CXX    =	$(CXX11)
 INCDIR =	include
 APPDIR =	app
 BINDIR =	bin
