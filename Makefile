@@ -12,8 +12,10 @@ LDFLAGS  := -Wl,--no-as-needed $(LDFLAGS) -L$(LIBDIR) $(ROOTLIBS)
 CXXFLAGS := $(CXXFLAGS) -O3 -mavx $(ROOTCXXF) -I$(INCDIR)
 
 CPP =	LoadTree	\
+	Absorption
 
-HPP =	
+HPP =	TrackManager	\
+	TrackFunctions
 
 TGT :=	$(CPP:%=$(APPDIR)/%)
 DEP :=	$(HPP:%=$(INCDIR)/%.o)
