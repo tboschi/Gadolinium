@@ -1,6 +1,6 @@
 .PHONY: clean
 
-CXX    =	$(CXX11)
+#CXX    =	$(CXX11)
 INCDIR =	include
 APPDIR =	app
 BINDIR =	bin
@@ -9,7 +9,7 @@ LIBDIR =	lib
 ROOTLIBS = $(shell root-config --glibs)
 ROOTCXXF = $(shell root-config --cflags)
 LDFLAGS  := -Wl,--no-as-needed $(LDFLAGS) -L$(LIBDIR) $(ROOTLIBS)
-CXXFLAGS := $(CXXFLAGS) -O3 -mavx $(ROOTCXXF) -I$(INCDIR)
+CXXFLAGS := $(CXXFLAGS) -fPIC -O3 -mavx $(ROOTCXXF) -I$(INCDIR)
 
 CPP =	LoadTree	\
 	Absorption

@@ -107,8 +107,14 @@ bool TrackManager::AverageTrack(std::vector<double> &vAvg, unsigned int n, bool 
 				vAvg.at(i) += vTrack.at(i)/vList.size();
 		}
 		if (Err)
-			for (unsigned int i = 0, j = vTrack.size(); i < vTrack.size(); ++i, ++j)
-				vAvg.at(j) += pow(vAvg.at(i)-vTrack.at(i), 2)/(vList.size()-1);
+		{
+			for (unsigned int i = 0; i < vList.size(); ++i)
+			{
+				LoadTrack(vTrack, vList.at(i));
+				for (unsigned int i = 0, j = vTrack.size(); i < vTrack.size(); ++i, ++j)
+					vAvg.at(j) += pow(vAvg.at(i)-vTrack.at(i), 2)/(vList.size()-1);
+			}
+		}
 	}
 
 	return vAvg.size();
