@@ -29,7 +29,7 @@ bool TrackManager::LoadFileList(std::vector<std::string> &vFile, unsigned int n)
 {
 	vFile.clear();
 
-	std::string Cmd = std::string("ls ") + vFold.at(n) + " > .tmp_listfile";
+	std::string Cmd = std::string("ls ") + vFold.at(n) + "/ledj* > .tmp_listfile";
 	system(Cmd.c_str());
 
 	std::string Line;
@@ -43,27 +43,24 @@ bool TrackManager::LoadFileList(std::vector<std::string> &vFile, unsigned int n)
 		ssL.str("");
 		ssL.clear();
 		ssL << Line;
+		//ssL << vFold.at(n) << "/" << Line;
 
-		vFile.push_back(Line);
+		vFile.push_back(ssL.str());
 	}
 
 	return vFile.size();
 }
 
 //load the spectrum contained in a single file
-//requires the list of files
-bool TrackManager::LoadTrack(std::vector<std::string> &vFile, std::vector<double> &vTrack, unsigned int nFile)
-{
-	LoadTrack(vTrack, vFile.at(nFile));
-}
-
 bool TrackManager::LoadTrack(std::vector<double> &vTrack, std::string FileName)
 {
+	vTrack.clear();
+	bool Test = (GetX() == 0);
+
 	std::string Line;
 	std::stringstream ssL;
 
 	std::ifstream InFile(FileName);
-	std::cout << "
 	while (std::getline(InFile, Line))
 	{
 		if (Line[0] == '#') continue;
@@ -79,7 +76,7 @@ bool TrackManager::LoadTrack(std::vector<double> &vTrack, std::string FileName)
 
 		if (vWord.size() == 2)
 		{
-			if (vXaxis.size() == 0)
+			if (Test)
 				vXaxis.push_back( atof(vWord.at(0).c_str()) );
 
 			vTrack.push_back( atof(vWord.at(1).c_str()) );
@@ -89,33 +86,33 @@ bool TrackManager::LoadTrack(std::vector<double> &vTrack, std::string FileName)
 	return vTrack.size();
 }
 
-//averages all the spectrum inside a folder
-bool TrackManager::AverageTrack(std::vector<double> &vTrack, unsigned int n)
+//averages all the spectrum inside folder n
+//the variance is appendended at the end of the spectrum, so the track is actually twice as long
+bool TrackManager::AverageTrack(std::vector<double> &vAvg, unsigned int n, bool Err)
 {
-	vTrack.clear();
+	vAvg.clear();
 
+	std::vector<double> vTrack;
 	std::vector<std::string> vList;
-	std::cout << "TM 0" << std::endl;
 	if (LoadFileList(vList, n))		//vList is a list of the files in the folder n
 	{					//looping over the list and averaging the spectra
-		std::cout << "if TM 0 " << vList.size() << std::endl;
 		for (unsigned int i = 0; i < vList.size(); ++i)
 		{
-			vTrack.clear();
-			std::cout << "TM L " << vList.at(i) << std::endl;
 			LoadTrack(vTrack, vList.at(i));
 
-			if (vTrack.size() == 0)
-				vTrack.resize(vTrack.size());
+			if (vAvg.size() == 0)
+				vAvg.resize((Err+1)*vTrack.size());	//twice the size if error wanted
 
 			for (unsigned int i = 0; i < vTrack.size(); ++i)
-				vTrack.at(i) += vTrack.at(i)/vList.size();
+				vAvg.at(i) += vTrack.at(i)/vList.size();
+
+			if (Err)
+				for (unsigned int i = 0, j = vTrack.size(); i < vTrack.size(); ++i, ++j)
+					vAvg.at(j) += pow(vAvg.at(i)-vTrack.at(i), 2)/(j-i-1);
 		}
-		std::cout << "if TM 1" << std::endl;
 	}
 
-	std::cout << "TM 1" << std::endl;
-	return vTrack.size();
+	return vAvg.size();
 }
 
 unsigned int TrackManager::GetEntries()

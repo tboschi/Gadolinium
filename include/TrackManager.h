@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <cstdlib>
+#include <cmath>
 
 class TrackManager
 {
@@ -14,9 +15,8 @@ class TrackManager
 		TrackManager(std::string ListFile);
 
 		bool LoadFileList(std::vector<std::string> &vFile, unsigned int n);
-		bool LoadTrack(std::vector<std::string> &vFile, std::vector<double> &vTrack, unsigned int nFile);
 		bool LoadTrack(std::vector<double> &vTrack, std::string FileName);
-		bool AverageTrack(std::vector<double> &vTrack, unsigned int n);
+		bool AverageTrack(std::vector<double> &vAvg, std::vector<double> &vAvgVar, unsigned int n);
 		unsigned int GetEntries();
 		double GetPercentage(unsigned int i);
 		std::string GetFolderName(unsigned int i);

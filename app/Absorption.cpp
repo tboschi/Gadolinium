@@ -15,15 +15,6 @@
 #include "TrackManager.h"
 #include "TrackFunctions.h"
 
-class Sort
-{
-	private:
-		std::vector<double> vX;
-	public:
-		Sort(std::vector<double> &vv) : vX(vv) {}
-		bool operator()(int i, int j) const { return vX.at(i) < vX.at(j); }
-};
-
 void Usage(char* Name);
 int main(int argc, char** argv)
 {
@@ -42,7 +33,7 @@ int main(int argc, char** argv)
 	opterr = 1;
 	
 	std::ifstream InFile;
-	std::ofstream SpecFile, PeakFile;
+	std::ofstream OutFile;
 	TFile *RootFile;
 	unsigned int Integ = 0;
 	std::string ListFile, BaseOut;
@@ -61,8 +52,8 @@ int main(int argc, char** argv)
 			case 's':
 				BaseOut.assign(optarg);
 				break;
-			case 'l':
-				PeakFile.open(optarg);
+			case 'o':
+				OutFile.open(optarg);
 				break;
 			case 'r':
 				RootFile = new TFile(optarg, "RECREATE");
@@ -82,59 +73,70 @@ int main(int argc, char** argv)
 	
 	}
 
-	std::ostream &OutS = (SpecFile.is_open()) ? SpecFile : std::cout;
-	std::ostream &OutP = (PeakFile.is_open()) ? PeakFile : std::cout;
+	std::ostream &Out = (OutFile.is_open()) ? OutFile : std::cout;
 
 	TrackManager   *Manager   = new TrackManager(ListFile);
-	std::cout << "H0" << std::endl;
 	if (Manager->GetEntries() < 2)
 	{
 		std::cerr << "Not enough entires" << std::endl;
 		return 1;
 	}
 
-	std::cout << "H1" << std::endl;
 	TrackFunctions *Functions = new TrackFunctions();
 
-	std::cout << "H2" << std::endl;
 	std::vector<double> v0;
-	std::cout << "H3" << std::endl;
-	Manager->AverageTrack(v0, 0);
-	std::cout << "H4" << std::endl;
-	Functions->Normalise(v0, A, B);
-	std::cout << "H5" << std::endl;
+	Manager->AverageTrack(v0, 0, 1);		//v0 contains the error
+	bool Err = (2*Manager->GetX() == v0.size());	//means error is in there, so must be propagated
+	//Functions->Smoothen(v0, 1);
+	Functions->Baseline(v0, 1, 1);
+	Functions->NormaliseArea(v0, A, A+40, 1);
 
-	std::cout << "H6 " << Manager->GetEntries() <<  std::endl;
 	for (unsigned int i = 1; i < Manager->GetEntries(); ++i)
 	{
 		std::vector<double> vY, vAbs;
 
-		std::cout << "F0" << std::endl;
-		if (Manager->AverageTrack(vY, i))
+		if (Manager->AverageTrack(vY, i, 1))
 		{
-			std::cout << "I0" << std::endl;
+			//Functions->Smoothen(vY, 1);
+			Functions->Baseline(vY, 1, 1);
+			Functions->NormaliseArea(vY, A, A+40, 1);
+
 			vAbs.insert(vAbs.end(), vY.begin(), vY.end());
-			std::cout << "I1" << std::endl;
-			Functions->Normalise(vAbs, A, B);
-			std::cout << "I2" << std::endl;
-			Functions->Absorption(v0, vAbs);
+			Functions->AbsorptionVar(v0, vAbs, 1);
 
-			std::cout << "I3" << std::endl;
-			std::stringstream ssL(BaseOut);
-			std::cout << "I4" << std::endl;
-			ssL << Manager->GetPercentage(i) << ".dat";
+			std::stringstream ssL;
+			ssL << BaseOut << Manager->GetPercentage(i) << ".dat";
 
-			std::cout << "I5" << std::endl;
-			std::ofstream Out(ssL.str().c_str());
-			std::cout << "I6" << std::endl;
+			std::ofstream TrackOut(ssL.str().c_str());
 			for (unsigned int j = 0; j < vY.size(); ++j)
-				Out << Manager->GetX(j) << "\t" << vY.at(j) << "\t" << vAbs.at(j) << std::endl;
-			std::cout << "I0" << std::endl;
+			{
+				TrackOut << Manager->GetX(j) << "\t" << v0.at(j) << "\t" << sqrt(v0Var.at(j)) << "\t";
+				TrackOut << vY.at(j) << "\t" << sqrt(vYVar.at(j)) << "\t";
+				TrackOut << vAbs.at(j) << "\t" << sqrt(vAbs.at(j)) << std::endl;
+			}
+
+			std::vector<unsigned int> iP, iV;
+			Functions->FindPeakValley(vAbs, iP, iV, A, B, 1);
+
+			/*
+			std::cout << "Peaks" << std::endl;
+			for (unsigned int j = 0; j < iP.size(); ++j)
+				std::cout << Manager->GetX(iP.at(j)) << "\t" << vAbs.at(iP.at(j)) << std::endl;
+				//std::cout << iP.at(j) << "\t" << vAbs.at(iP.at(j)) << std::endl;
+			std::cout << "Deeps" << std::endl;
+			for (unsigned int j = 0; j < iV.size(); ++j)
+				std::cout << Manager->GetX(iV.at(j)) << "\t" << vAbs.at(iV.at(j)) << std::endl;
+			*/
+
+			double AbsDiff    = Functions->AbsorptionDiff(vY, iP.at(0), iP.at(1));
+			double AbsDiffVar = Functions->AbsorptionDiffVar(vY, vYVar, iP.at(0), iP.at(1));
+			Out << Manager->GetPercentage(i) << "\t";
+			Out << vAbs.at(iP.at(0)) << "\t" << sqrt(vAbsVar.at(iP.at(0))) << "\t";
+			Out << vAbs.at(iP.at(1)) << "\t" << sqrt(vAbsVar.at(iP.at(1))) << "\t";
+			Out << AbsDiff << "\t" << sqrt(AbsDiffVar) << std::endl;
 
 		}
-		std::cout << "F1" << std::endl;
 	}
-	std::cout << "H7 " << Manager->GetEntries() <<  std::endl;
 
 	return 0;
 }
