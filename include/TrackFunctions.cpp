@@ -72,8 +72,7 @@ double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool
 
 	fBaseline = 0, fBaselVar = 0;
 	int SampleLength = 0;
-	unsigned int iLoop = vTrack.size()/(1+Err);
-	for (unsigned int i = 0, unsigned int e = vTrack.size()/2; i < iLoop; ++i, ++e)
+	for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
 	{
 		double s0 = vTrack.at(i);
 		double sum = 0, var = 0;
@@ -107,7 +106,7 @@ double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool
 
 	if (Subtract)
 	{
-		for (unsigned int i = 0, unsigned int e = vTrack.size()/2; i < iLoop; ++i, ++e)
+		for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
 		{
 			vTrack.at(i) -= fBaseline;
 			if (Err)
@@ -122,16 +121,13 @@ double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool
 //normalise to reference track, using highest peak in region [iA:iB]
 void TrackFunctions::Normalise(std::vector<double> &vTrack, double Norm, double NormVar)
 {
-	bool Err = true;
-	if (NVar < 0.0)
-		Err = false;
+	bool Err = NormVar >= 0.0;
 
-	unsigned int iLoop = vTrack.size()/(1+Err);
-	for (unsigned int i = 0, unsigned int e = vTrack.size()/2; i < iLoop; ++i, ++e)
+	for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
 	{
-		double t = vTrack.at(j);	//o ~ x^2/y^2 (o_y / y + 0_x / x)
+		double t = vTrack.at(i);	//o ~ x^2/y^2 (o_y / y + 0_x / x)
 		vTrack.at(e) = pow(t/Norm, 2.0) * (vTrack.at(e)/t/t + NormVar/Norm/Norm);
-		vTrack.at(j) /= Norm;
+		vTrack.at(i) /= Norm;
 	}
 }
 
@@ -162,26 +158,15 @@ std::vector<double> TrackFunctions::Absorption(const std::vector<double> &vRef,
 					       bool Err)
 {
 	std::vector<double> vAbs(vRef.size());
-	for (unsigned int i = 0, unsigned int e = vRef.size()/2; i < vRef.size()(1+Err); ++i, ++e)
+	for (unsigned int i = 0, e = vRef.size()/2; i < vRef.size()/(1+Err); ++i, ++e)
 	{
 		if (Err)
 			vAbs.at(e) = vRef.at(e)/pow(log(10.0)*vRef.at(i), 2) + 
 				     vTrack.at(e)/pow(log(10.0)*vTrack.at(i), 2);
 		vAbs.at(i) = log10(vRef.at(i) / vTrack.at(i)); 
 	}
-}
 
-bool TrackFunctions::AbsorptionVar(const std::vector<double> &vRef, 
-				   const std::vector<double> &vRefVar, 
-				   std::vector<double> &vTrack, 
-				   std::vector<double> &vTrackVar)
-{
-	for (unsigned int i = 0; i < vRef.size(); ++i)
-	{
-		vTrackVar.at(i) =  vRefVar.at(i) / pow(log(10.0)*vRef.at(i), 2);
-		vTrackVar.at(i) += vTrackVar.at(i) / pow(log(10.0)*vTrack.at(i), 2);
-		vTrack.at(i) = log10(vRef.at(i) / vTrack.at(i)); 
-	}
+	return vAbs;
 }
 
 double TrackFunctions::AbsorptionDiff(const std::vector<double> &vTrack, unsigned int A, unsigned int B)
@@ -189,11 +174,11 @@ double TrackFunctions::AbsorptionDiff(const std::vector<double> &vTrack, unsigne
 	return log10(vTrack.at(B)/vTrack.at(A));
 }
 
-double TrackFunctions::AbsorptionDiffVar(const std::vector<double> &vRef, const std::vector<double> &vRefVar, 
-					 unsigned int A, unsigned int B)
+double TrackFunctions::AbsorptionDiffErr(const std::vector<double> &vTrack, unsigned int A, unsigned int B)
 {
-	double Abs = AbsorptionDiff(vRef, A, B);
-	return vRefVar.at(A) / pow(log(10.0)*vRefVar.at(A), 2) + vRefVar.at(B) / pow(log(10.0)*vRefVar.at(B), 2);
+	double Abs = AbsorptionDiff(vTrack, A, B);
+	return vTrack.at(A+vTrack.size()/2) / pow(log(10.0)*vTrack.at(A), 2) + 
+	       vTrack.at(B+vTrack.size()/2) / pow(log(10.0)*vTrack.at(B), 2);
 }
 
 //valleys and peaks of a smoothened track
@@ -348,6 +333,11 @@ double TrackFunctions::GetPercentage()
 double TrackFunctions::GetArea()
 {
 	return fArea;
+}
+
+double TrackFunctions::GetAreaVar()
+{
+	return fAreaVar;
 }
 
 double TrackFunctions::GetThr()

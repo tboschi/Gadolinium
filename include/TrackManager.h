@@ -16,7 +16,7 @@ class TrackManager
 
 		bool LoadFileList(std::vector<std::string> &vFile, unsigned int n);
 		bool LoadTrack(std::vector<double> &vTrack, std::string FileName);
-		bool AverageTrack(std::vector<double> &vAvg, std::vector<double> &vAvgVar, unsigned int n);
+		bool AverageTrack(std::vector<double> &vAvg, unsigned int n, bool Err);
 		unsigned int GetEntries();
 		double GetPercentage(unsigned int i);
 		std::string GetFolderName(unsigned int i);

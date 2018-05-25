@@ -87,32 +87,33 @@ int main(int argc, char** argv)
 	std::vector<double> v0;
 	Manager->AverageTrack(v0, 0, 1);		//v0 contains the error
 	bool Err = (2*Manager->GetX() == v0.size());	//means error is in there, so must be propagated
-	//Functions->Smoothen(v0, 1);
-	Functions->Baseline(v0, 1, 1);
-	Functions->NormaliseArea(v0, A, A+40, 1);
 
-	for (unsigned int i = 1; i < Manager->GetEntries(); ++i)
+	//Functions->Smoothen(v0, 1);
+	Functions->Baseline(v0, 1, Err);
+	Functions->NormaliseArea(v0, A, A+40, Err);
+
+	for (unsigned int j = 1; j < Manager->GetEntries(); ++j)
 	{
 		std::vector<double> vY, vAbs;
 
-		if (Manager->AverageTrack(vY, i, 1))
+		if (Manager->AverageTrack(vY, j, Err))
 		{
 			//Functions->Smoothen(vY, 1);
-			Functions->Baseline(vY, 1, 1);
-			Functions->NormaliseArea(vY, A, A+40, 1);
+			Functions->Baseline(vY, 1, Err);
+			Functions->NormaliseArea(vY, A, A+40, Err);
 
-			vAbs.insert(vAbs.end(), vY.begin(), vY.end());
-			Functions->AbsorptionVar(v0, vAbs, 1);
+			//vAbs.insert(vAbs.end(), vY.begin(), vY.end());
+			vAbs = Functions->Absorption(v0, vY, Err);
 
 			std::stringstream ssL;
-			ssL << BaseOut << Manager->GetPercentage(i) << ".dat";
+			ssL << BaseOut << Manager->GetPercentage(j) << ".dat";
 
 			std::ofstream TrackOut(ssL.str().c_str());
-			for (unsigned int j = 0; j < vY.size(); ++j)
+			for (unsigned int i = 0, e = v0.size()/2; i < v0.size()/(1+Err); ++i, ++e)
 			{
-				TrackOut << Manager->GetX(j) << "\t" << v0.at(j) << "\t" << sqrt(v0Var.at(j)) << "\t";
-				TrackOut << vY.at(j) << "\t" << sqrt(vYVar.at(j)) << "\t";
-				TrackOut << vAbs.at(j) << "\t" << sqrt(vAbs.at(j)) << std::endl;
+				TrackOut << Manager->GetX(i) << "\t" << v0.at(i) << "\t" << sqrt(v0.at(e)) << "\t";
+				TrackOut << vY.at(i) << "\t" << sqrt(vY.at(e)) << "\t";
+				TrackOut << vAbs.at(i) << "\t" << sqrt(vAbs.at(e)) << std::endl;
 			}
 
 			std::vector<unsigned int> iP, iV;
@@ -129,12 +130,21 @@ int main(int argc, char** argv)
 			*/
 
 			double AbsDiff    = Functions->AbsorptionDiff(vY, iP.at(0), iP.at(1));
-			double AbsDiffVar = Functions->AbsorptionDiffVar(vY, vYVar, iP.at(0), iP.at(1));
-			Out << Manager->GetPercentage(i) << "\t";
-			Out << vAbs.at(iP.at(0)) << "\t" << sqrt(vAbsVar.at(iP.at(0))) << "\t";
-			Out << vAbs.at(iP.at(1)) << "\t" << sqrt(vAbsVar.at(iP.at(1))) << "\t";
-			Out << AbsDiff << "\t" << sqrt(AbsDiffVar) << std::endl;
+			double AbsDiffVar = -1.0;
+			if (Err) 
+				AbsDiffVar = Functions->AbsorptionDiffErr(vY, iP.at(0), iP.at(1));
 
+			Out << Manager->GetPercentage(j) << "\t";
+			Out << vAbs.at(iP.at(0)) << "\t";
+			if (Err)
+				Out << sqrt(vAbs.at(iP.at(0)+vAbs.size()/2)) << "\t";
+			Out << vAbs.at(iP.at(1)) << "\t";
+			if (Err)
+				Out << sqrt(vAbs.at(iP.at(1)+vAbs.size()/2)) << "\t";
+			Out << AbsDiff;
+			if (Err)
+				Out << "\t" << sqrt(AbsDiffVar);
+			Out << std::endl;
 		}
 	}
 

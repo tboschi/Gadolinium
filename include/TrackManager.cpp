@@ -105,11 +105,10 @@ bool TrackManager::AverageTrack(std::vector<double> &vAvg, unsigned int n, bool 
 
 			for (unsigned int i = 0; i < vTrack.size(); ++i)
 				vAvg.at(i) += vTrack.at(i)/vList.size();
-
-			if (Err)
-				for (unsigned int i = 0, j = vTrack.size(); i < vTrack.size(); ++i, ++j)
-					vAvg.at(j) += pow(vAvg.at(i)-vTrack.at(i), 2)/(j-i-1);
 		}
+		if (Err)
+			for (unsigned int i = 0, j = vTrack.size(); i < vTrack.size(); ++i, ++j)
+				vAvg.at(j) += pow(vAvg.at(i)-vTrack.at(i), 2)/(vList.size()-1);
 	}
 
 	return vAvg.size();
