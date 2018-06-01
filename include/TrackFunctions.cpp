@@ -10,57 +10,90 @@ void TrackFunctions::SetPercentage(double Percentage)
 	fPerc = Percentage;
 }
 
-/*
-void TrackFunctions::SetTrack(std::vector<double> &vSpectrum)
+void TrackFunctions::SetInterval(TrackManager* TM, double A, double B)
 {
-	vTrack.clear();
-	vTrack.insert(vTrack.end(), vSpectrum.begin(), vSpectrum.end());
+	iA = 0;
+	iB = 0;
+
+	if (A > B)
+	{
+		double tmp = A;
+		A = B;
+		B = tmp;
+	}
+
+	for (unsigned int i = 0; i < TM->GetX(); ++i)
+	{
+		if (TM->GetX(i) < A && A < TM->GetX(i+1))
+			iA = i;
+		if (TM->GetX(i) < B && B < TM->GetX(i+1))
+			iB = i;
+	}
+	std::cout << "from iA " << iA << "\t" << " to iB " << iB << std::endl;
 }
 
-void TrackFunctions::SetReferenceTrack(std::vector<double> &vSpectrum)
+void TrackFunctions::Analyse(const std::vector<double> &vTrack, bool Err)
 {
-	vTRef.clear();
-	vTRef.insert(vTRef.end(), vTRef.begin(), vTRef.end());
-}
-*/
-
-void TrackFunctions::Analyse(const std::vector<double> &vTrack, int iA, int iB, bool Err)
-{
-	if (iA < -1)
+	if (iA < 0)
 		iA = 0;
-	if (iB < -1)
+	if (iB > vTrack.size()/(1+Err))
 		iB = vTrack.size()/(Err+1);
 
 	fArea = 0.0;
-	fAreaVar = -1.0+Err;
-	fMax = -100.0;
+	fA1  = 0.0;
+	fA2  = 0.0;
+	fAreaVar = -(!Err);
+	fA1Var   = -(!Err);	//-1 if no error
+	fA2Var   = -(!Err);	//0 if error
+	fT1 = (2*iA + iB)/3;
+	fT2 = (iA + 2*iB)/3;
+
+	fMax    = -100.0;
+	fMin    =  100.0;
 	fMaxVar = -1.0;
-	iMax = 0.0;
-	fMin = 100.0;
 	fMinVar = -1.0;
-	iMin = 0.0;
+	iMax    =  0.0;
+	iMin    =  0.0;
 
-	for (int i = iA; i < iB; ++i)
+	unsigned int Nf1 = 0, Nf2 = 2;
+	for (unsigned int j = iA, e = iA + vTrack.size()/(1+Err); j < iB; ++j, ++e)
 	{
-		if (fMax < vTrack.at(i))
+		if (fMax < vTrack.at(j))
 		{
-			fMax = vTrack.at(i);
-			iMax = i;
+			fMax = vTrack.at(j);
+			iMax = j;
 		}
-		if (fMin > vTrack.at(i))
+		if (fMin > vTrack.at(j))
 		{
-			fMin = vTrack.at(i);
-			iMin = i;
+			fMin = vTrack.at(j);
+			iMin = j;
 		}
 
-		fArea += vTrack.at(i);
+
+		fArea += vTrack.at(j);
 		if (Err)
-			fAreaVar += vTrack.at(i+vTrack.size()/2);
+			fAreaVar += vTrack.at(e);
+		if (j < fT1)
+		{
+			fA1    += vTrack.at(j);
+			if (Err)
+				fA1Var += vTrack.at(e);
+			++Nf1;
+		}
+		if (j > fT2)
+		{
+			fA2    += vTrack.at(j);
+			if (Err)
+				fA2Var += vTrack.at(e);
+			++Nf2;
+		}
 	}
+
+	//min and max error
 	if (Err)
 	{
-		fMaxVar = vTrack.at(iMax);
-		fMinVar = vTrack.at(iMin);
+		fMaxVar = vTrack.at(iMax+vTrack.size()/2);
+		fMinVar = vTrack.at(iMin+vTrack.size()/2);
 	}
 
 	fThr = fPerc*(fMax-fMin);
@@ -68,16 +101,18 @@ void TrackFunctions::Analyse(const std::vector<double> &vTrack, int iA, int iB, 
 
 double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool Err)
 {
-	Analyse(vTrack);
+	Analyse(vTrack, Err);
 
 	fBaseline = 0, fBaselVar = 0;
 	int SampleLength = 0;
+	std::cout << "the " << GetThr() << std::endl;
+	unsigned int A, B;
 	for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
 	{
 		double s0 = vTrack.at(i);
 		double sum = 0, var = 0;
 		unsigned int j = i;
-		while (j < vTrack.size() && fabs(vTrack.at(j) - s0) < GetThr())
+		while (j < vTrack.size()/(1+Err) && fabs(vTrack.at(j) - s0) < GetThr())
 		{
 			if (Err)
 			{
@@ -85,7 +120,7 @@ double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool
 				var += 1/vTrack.at(e);
 			}
 			else
-				sum    += vTrack.at(j);
+				sum += vTrack.at(j);
 			++j;
 		}
 
@@ -100,10 +135,13 @@ double TrackFunctions::Baseline(std::vector<double> &vTrack, bool Subtract, bool
 				fBaseline = sum/(j-1);
 
 			SampleLength = j-i;
+			A = i;
+			B = j;
 		}
 		i = j;		//skip forward
 	}
 
+	std::cout << "baseline from " << A << "\tto\t" << B << std::endl;
 	if (Subtract)
 	{
 		for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
@@ -123,11 +161,11 @@ void TrackFunctions::Normalise(std::vector<double> &vTrack, double Norm, double 
 {
 	bool Err = NormVar >= 0.0;
 
-	for (unsigned int i = 0, e = vTrack.size()/2; i < vTrack.size()/(1+Err); ++i, ++e)
+	for (unsigned int j = iA, e = iA + vTrack.size()/(1+Err); j < iB; ++j, ++e)
 	{
-		double t = vTrack.at(i);	//o ~ x^2/y^2 (o_y / y + 0_x / x)
+		double t = vTrack.at(j);	//o ~ x^2/y^2 (o_y / y + 0_x / x)
 		vTrack.at(e) = pow(t/Norm, 2.0) * (vTrack.at(e)/t/t + NormVar/Norm/Norm);
-		vTrack.at(i) /= Norm;
+		vTrack.at(j) /= Norm;
 	}
 }
 
@@ -141,16 +179,20 @@ void TrackFunctions::NormaliseLine(std::vector<double> &vTrack, int Line, bool E
 		return Normalise(vTrack, vTrack.at(Line), LineVar);
 }
 
-void TrackFunctions::NormalisePeak(std::vector<double> &vTrack, int iA, int iB, bool Err)
+void TrackFunctions::NormalisePeak(std::vector<double> &vTrack, bool Err)
 {
-	Analyse(vTrack, iA, iB, Err);
+	Analyse(vTrack, Err);
 	Normalise(vTrack, GetMax(), GetMaxVar());
 }
 
-void TrackFunctions::NormaliseArea(std::vector<double> &vTrack, int iA, int iB, bool Err)
+//using T1 and Q3 to define two wings and normalise with median value
+void TrackFunctions::NormaliseArea(std::vector<double> &vTrack, bool Err)
 {
-	Analyse(vTrack, iA, iB, Err);
-	Normalise(vTrack, GetArea(), GetAreaVar());
+	Analyse(vTrack, Err);
+	double VarA = Err ? 1 / (1.0/GetAreaT1Var() + 1.0/GetAreaT2Var()) : -1.0;
+	double AvgA = (GetAreaT1()/GetAreaT1Var() + GetAreaT2()/GetAreaT2Var()) * VarA;
+
+	Normalise(vTrack, AvgA, VarA);
 }
 
 std::vector<double> TrackFunctions::Absorption(const std::vector<double> &vRef, 
@@ -158,12 +200,11 @@ std::vector<double> TrackFunctions::Absorption(const std::vector<double> &vRef,
 					       bool Err)
 {
 	std::vector<double> vAbs(vRef.size());
-	for (unsigned int i = 0, e = vRef.size()/2; i < vRef.size()/(1+Err); ++i, ++e)
+	for (unsigned int j = iA, e = iA + vRef.size()/(1+Err); j < iB; ++j, ++e)
 	{
 		if (Err)
-			vAbs.at(e) = vRef.at(e)/pow(log(10.0)*vRef.at(i), 2) + 
-				     vTrack.at(e)/pow(log(10.0)*vTrack.at(i), 2);
-		vAbs.at(i) = log10(vRef.at(i) / vTrack.at(i)); 
+			vAbs.at(e) = vRef.at(e)/pow(vRef.at(j), 2) + vTrack.at(e)/pow(vTrack.at(j), 2);
+		vAbs.at(j) = log(vRef.at(j) / vTrack.at(j)); 
 	}
 
 	return vAbs;
@@ -171,14 +212,13 @@ std::vector<double> TrackFunctions::Absorption(const std::vector<double> &vRef,
 
 double TrackFunctions::AbsorptionDiff(const std::vector<double> &vTrack, unsigned int A, unsigned int B)
 {
-	return log10(vTrack.at(B)/vTrack.at(A));
+	return log(vTrack.at(A)/vTrack.at(B));
 }
 
 double TrackFunctions::AbsorptionDiffErr(const std::vector<double> &vTrack, unsigned int A, unsigned int B)
 {
-	double Abs = AbsorptionDiff(vTrack, A, B);
-	return vTrack.at(A+vTrack.size()/2) / pow(log(10.0)*vTrack.at(A), 2) + 
-	       vTrack.at(B+vTrack.size()/2) / pow(log(10.0)*vTrack.at(B), 2);
+	return vTrack.at(A+vTrack.size()/2)/pow(vTrack.at(A), 2) + 
+	       vTrack.at(B+vTrack.size()/2)/pow(vTrack.at(B), 2);
 }
 
 //valleys and peaks of a smoothened track
@@ -190,14 +230,9 @@ void TrackFunctions::FindPeakValley(std::vector<unsigned int> &iPeak, std::vecto
 }
 */
 
-void TrackFunctions::FindPeakValley(const std::vector<double> &vTrack, std::vector<unsigned int> &iPeak, std::vector<unsigned int> &iVall, int iA, int iB, bool Sorting)
+void TrackFunctions::FindPeakValley(const std::vector<double> &vTrack, std::vector<unsigned int> &iPeak, std::vector<unsigned int> &iVall, bool Sorting)
 {
-	if (iA < -1)
-		iA = -1;
-	if (iB < 0)
-		iB = vTrack.size();
-
-	Analyse(vTrack, iA, iB);	//needed
+	Analyse(vTrack);	//needed
 	std::deque<unsigned int> dPeak, dVall;
 
 	dPeak.push_back(GetMax_i());
@@ -208,7 +243,7 @@ void TrackFunctions::FindPeakValley(const std::vector<double> &vTrack, std::vect
 		double PoV = false;		//F looking for Valley, T looking for P
 		int iD = GetMax_i(), iS = GetMax_i();
 		double fS = GetMax();
-		while (iD > iA && iD < iB)
+		while (iD > GetT1() && iD < GetT2())
 		{
 			int Sign = 2*PoV - 1;	//-1 looking for Valley, +1 looking for Peak
 			if ( Sign*(vTrack.at(iD) - fS) > GetThr())
@@ -340,6 +375,35 @@ double TrackFunctions::GetAreaVar()
 	return fAreaVar;
 }
 
+double TrackFunctions::GetT1()
+{
+	return fT1;
+}
+
+double TrackFunctions::GetT2()
+{
+	return fT2;
+}
+
+double TrackFunctions::GetAreaT1()
+{
+	return fA1;
+}
+
+double TrackFunctions::GetAreaT2()
+{
+	return fA2;
+}
+
+double TrackFunctions::GetAreaT1Var()
+{
+	return fA1Var;
+}
+
+double TrackFunctions::GetAreaT2Var()
+{
+	return fA2Var;
+}
 double TrackFunctions::GetThr()
 {
 	return fThr;

@@ -10,6 +10,8 @@
 #include <cmath>
 #include <algorithm>
 
+#include "TrackManager.h"
+
 struct Sort
 {
 	std::vector<double> vX;
@@ -22,29 +24,36 @@ struct Sort
 class TrackFunctions
 {
 	public:
-		TrackFunctions(double Percentage = 0.02);
+		TrackFunctions(double Percentage = 0.01);
 
+		void SetInterval(TrackManager *TM, double A, double B);
 		void SetPercentage(double Percentage);
-		void Analyse(const std::vector<double> &vTrack, int iA = -100, int iB = -100, bool Err = false);
+		void Analyse(const std::vector<double> &vTrack, bool Err = false);
 		double Baseline(std::vector<double> &vTrack, bool Subtract = false, bool Err = false);
 		void Normalise(std::vector<double> &vTrack, double Norm = 1, double NormVar = -1.0);
 		void NormaliseLine(std::vector<double> &vTrack, int Line = 0, bool Err = false);
-		void NormalisePeak(std::vector<double> &vTrack, int iA = -100, int iB = -100, bool Err = false);
-		void NormaliseArea(std::vector<double> &vTrack, int iA = -100, int iB = -100, bool Err = false);
+		void NormalisePeak(std::vector<double> &vTrack, bool Err = false);
+		void NormaliseArea(std::vector<double> &vTrack, bool Err = false);
 		std::vector<double> Absorption(const std::vector<double> &vRef, 
 					       const std::vector<double> &vTrack, bool Err = false);
 		double AbsorptionDiff(const std::vector<double> &vTrack, unsigned int A, unsigned int B);
 		double AbsorptionDiffErr(const std::vector<double> &vTrack, unsigned int A, unsigned int B);
 		void FindPeakValley(const std::vector<double> &vTrack, 
-					  std::vector<unsigned int> &iPeak, 
-					  std::vector<unsigned int> &iVall, 
-				    int iA = -100, int iB = -100, bool Sorting = false);
+				    std::vector<unsigned int> &iPeak, 
+				    std::vector<unsigned int> &iVall, 
+				    bool Sorting = false);
 		void Smoothen(std::vector<double> &vTrack, unsigned int Integrate);
 		void Markov(std::vector<double> &vTrack, int Window);
 
 		double GetPercentage();
 		double GetArea();
 		double GetAreaVar();
+		double GetT1();
+		double GetT2();
+		double GetAreaT1();
+		double GetAreaT2();
+		double GetAreaT1Var();
+		double GetAreaT2Var();
 		double GetThr();
 		double GetBaseline();
 		double GetMax();
@@ -55,18 +64,18 @@ class TrackFunctions
 		unsigned int GetMin_i();
 
 	private:
+
+		unsigned int iA, iB;
+
 		double fPerc;
-		double fArea;
-		double fAreaVar;
+		double fArea, fAreaVar;
+		double fA1, fA1Var, fT1;
+		double fA2, fA2Var, fT2;
 		double fThr;
-		double fBaseline;
-		double fBaselVar;
-		double fMax;
-		double fMaxVar;
-		double fMin;
-		double fMinVar;
-		int iMax;
-		int iMin;
+		double fBaseline, fBaselVar;
+		double fMax, fMaxVar;
+		double fMin, fMinVar;
+		unsigned int iMax, iMin;
 
 };
 
